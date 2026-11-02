@@ -1,0 +1,11 @@
+F Flock Cam helps you stay clear of surveillance flock cameras.
+
+F Flock Cam combines crowd-reported and provider-backed flock camera locations into a single map experience. Once a device is running the background action runner, the hybrid cloud backend (F-Flock-Cam server) watches the flock camera catalog from Deflock and your own reported camera locations, and nudges you away from cameras that may be monitoring activity in your mapped direction.
+
+Features:
+- Nearby flock camera discovery within a small radius.
+- Route-based camera prediction along your mapped directions.
+- Route adjustments that avoid known flock camera locations.
+- Remote background action runner for start/stop monitoring sessions.
+
+The app does not collect or sell personal data. Camera locations are used to keep users away from surveillance points.

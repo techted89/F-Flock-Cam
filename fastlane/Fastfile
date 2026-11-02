@@ -1,0 +1,15 @@
+default_platform(:android)
+
+platform :android do
+  desc "Build and upload F-Flock-Cam to the Google Play Console"
+  lane :android_play_store do
+    aab_path = ENV["AAB_PATH"] || "../app/build/outputs/bundle/release/app-release.aab"
+    track = ENV["PLAY_TRACK"] || "internal"
+
+    supply(
+      aab: aab_path,
+      track: track,
+      skip_upload_metadata: false
+    )
+  end
+end

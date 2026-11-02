@@ -1,0 +1,13 @@
+{
+  "name": "flockcam-playwright",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright web browser setup with stealth addons for F-Flock-Cam release workflows and research tasks",
+  "scripts": {
+    "install": "playwright install chromium",
+    "stealth": "node src/stealth.js"
+  },
+  "dependencies": {
+    "playwright": "^1.44.0"
+  }
+}

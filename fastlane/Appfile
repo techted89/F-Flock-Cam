@@ -1,0 +1,5 @@
+app_identifier("com.techted89.flockcam") do |app|
+  app.android do
+    package_name "com.techted89.flockcam"
+  end
+end
