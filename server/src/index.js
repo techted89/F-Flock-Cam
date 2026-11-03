@@ -1,8 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const { db } = require('./db');
-const { fetchDeflockCameras } = require('./deflock');
-const { planRouteAvoiding, straightLineRoute, camerasAlongRoute, haversineMeters } = require('./routing');
+const { fetchDeflockCamerasInBbox } = require('./deflock');
+const { planRouteAvoiding, listUserCamerasWithinRadius, haversineMeters } = require('./routing');
 const actionsApi = require('./actions');
 
 const app = express();
@@ -11,6 +11,17 @@ app.use(express.json());
 
 const PORT = Number(process.env.PORT || 8080);
 const DEVICE_ID = process.env.DEVICE_ID || 'anonymous-device';
+
+function bboxAround(latitude, longitude, radiusMeters) {
+  const latDelta = (radiusMeters / 111_320) + 1;
+  const lngDelta = (radiusMeters / (111_320 * Math.max(Math.cos((Number(latitude) * Math.PI) / 180), 0.01))) + 1;
+  return {
+    minLat: Number(latitude) - latDelta,
+    maxLat: Number(latitude) + latDelta,
+    minLng: Number(longitude) - lngDelta,
+    maxLng: Number(longitude) + lngDelta,
+  };
+}
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'F-Flock-Cam hybrid server' });
@@ -24,21 +35,20 @@ app.get('/api/cameras/nearby', async (req, res) => {
     return res.status(400).json({ status: 'error', message: 'lat and lng are required' });
   }
 
-  const deflockCameras = await fetchDeflockCameras();
+  const bbox = bboxAround(latitude, longitude, radius);
+  const deflockCameras = await fetchDeflockCamerasInBbox(bbox.minLat, bbox.maxLat, bbox.minLng, bbox.maxLng);
   const userCameras = listUserCamerasWithinRadius(latitude, longitude, radius);
   const merged = [...userCameras];
   for (const camera of deflockCameras) {
     if (camera.latitude == null || camera.longitude == null) continue;
-    if (haversineMeters(camera, { latitude, longitude }) > radius) continue;
+    const distance = haversineMeters(camera, { latitude, longitude });
+    if (distance > radius) continue;
     if (merged.some((existing) => existing.id === camera.id)) continue;
-    merged.push({
-      ...camera,
-      distanceMeters: haversineMeters(camera, { latitude, longitude }),
-    });
+    merged.push({ ...camera, distanceMeters: distance });
   }
   merged.sort((a, b) => (a.distanceMeters ?? Number.MAX_SAFE_INTEGER) - (b.distanceMeters ?? Number.MAX_SAFE_INTEGER));
 
-  return res.json({ cameras: merged, source: 'HYBRID', cached: true });
+  return res.json({ cameras: merged, source: 'HYBRID', bbox });
 });
 
 app.post('/api/cameras', (req, res) => {
@@ -52,21 +62,12 @@ app.post('/api/cameras', (req, res) => {
   return res.json({ status: 'ok', cameraId: Number(info.lastInsertRowid) });
 });
 
-app.post('/api/routes/predict', (req, res) => {
+app.post('/api/routes/predict', async (req, res) => {
   const { originLatitude, originLongitude, destinationLatitude, destinationLongitude, radiusMeters } = req.body || {};
-  const result = planRouteAvoiding(
-    { latitude: originLatitude, longitude: originLongitude },
-    { latitude: destinationLatitude, longitude: destinationLongitude },
-    [],
-    { radiusMeters: radiusMeters || 500 },
-  );
-  return res.json({ route: result.route, cameras: result.cameras });
-});
-
-app.post('/api/routes/avoid', async (req, res) => {
-  const { originLatitude, originLongitude, destinationLatitude, destinationLongitude, radiusMeters } = req.body || {};
-  const deflockCameras = await fetchDeflockCameras();
-  const userCameras = listUserCamerasWithinRadius(originLatitude, originLongitude, radiusMeters || 500);
+  const radius = Number(radiusMeters || 500);
+  const bbox = bboxAround(originLatitude, destinationLatitude, radius * 2);
+  const deflockCameras = await fetchDeflockCamerasInBbox(bbox.minLat, bbox.maxLat, bbox.minLng, bbox.maxLng);
+  const userCameras = listUserCamerasWithinRadius(originLatitude, destinationLatitude, radius * 2);
   const avoidCameras = [...userCameras, ...deflockCameras]
     .filter((camera) => camera.latitude != null && camera.longitude != null)
     .slice(0, 50);
@@ -75,10 +76,29 @@ app.post('/api/routes/avoid', async (req, res) => {
     { latitude: originLatitude, longitude: originLongitude },
     { latitude: destinationLatitude, longitude: destinationLongitude },
     avoidCameras,
-    { radiusMeters: radiusMeters || 500 },
+    { radiusMeters: radius },
   );
 
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  return res.json({ route: result.route, cameras: result.cameras });
+});
+
+app.post('/api/routes/avoid', async (req, res) => {
+  const { originLatitude, originLongitude, destinationLatitude, destinationLongitude, radiusMeters } = req.body || {};
+  const radius = Number(radiusMeters || 500);
+  const bbox = bboxAround(originLatitude, destinationLatitude, radius * 2);
+  const deflockCameras = await fetchDeflockCamerasInBbox(bbox.minLat, bbox.maxLat, bbox.minLng, bbox.maxLng);
+  const userCameras = listUserCamerasWithinRadius(originLatitude, originLongitude, radius * 2);
+  const avoidCameras = [...userCameras, ...deflockCameras]
+    .filter((camera) => camera.latitude != null && camera.longitude != null)
+    .slice(0, 50);
+
+  const result = planRouteAvoiding(
+    { latitude: originLatitude, longitude: originLongitude },
+    { latitude: destinationLatitude, longitude: destinationLongitude },
+    avoidCameras,
+    { radiusMeters: radius },
+  );
+
   return res.json({ route: result.route, cameras: result.cameras, avoided: result.avoided });
 });
 
