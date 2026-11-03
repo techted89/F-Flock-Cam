@@ -8,12 +8,24 @@ local.properties
 # signing / secrets
 *.keystore
 *.jks
+*.pem
+*service-account*.json
+*service_account*.json
+client_secret*.json
 fastlane/play/
+fastlane/google-play-service-account.json
 
 # server
-server/node_modules/
+node_modules/
+server/data/
 server/*.db
+server/*.db-wal
+server/*.db-shm
 server/*.log
+
+# Playwright auth/session state
+scripts/playwright/.auth/
+playwright/.auth/
 
 # env
 .env

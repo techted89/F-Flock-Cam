@@ -3,23 +3,11 @@ package com.techted89.flockcam.remote
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.techted89.flockcam.data.model.ActionAck
-import com.techted89.flockcam.data.model.ActionResponse
-import com.techted89.flockcam.data.model.EnqueueActionRequest
-import com.techted89.flockcam.data.model.PendingAction
-import com.techted89.flockcam.data.remote.FlockApi
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 
 class RemoteActionWorker(
     context: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
-
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override suspend fun doWork(): Result {
         val repository = (applicationContext as com.techted89.flockcam.FlockCamApplication).remoteActionRepository

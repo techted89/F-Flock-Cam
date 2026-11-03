@@ -1,0 +1,45 @@
+[Unit]
+Description=F-Flock-Cam hybrid API (user, payment, and camera index services)
+Documentation=https://github.com/techted89/F-Flock-Cam
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=flockcam
+Group=flockcam
+WorkingDirectory=/opt/flockcam/server
+EnvironmentFile=/etc/flockcam/flockcam.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# The service is a single Node process; one core is enough and the rest stay
+# free for nginx and the OS. MemoryMax is the hard ceiling that keeps the
+# 8 GB VPS from ever swapping this process out.
+MemoryMax=900M
+MemoryHigh=700M
+CPUQuota=150%
+TasksMax=256
+LimitNOFILE=8192
+
+# Hardening: the process only needs its own directory and the SQLite file.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+ReadWritePaths=/var/lib/flockcam
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

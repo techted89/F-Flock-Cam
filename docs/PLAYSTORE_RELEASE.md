@@ -4,10 +4,12 @@ This document describes how the **F-Flock-Cam** Android app is built, signed and
 
 ## Overview
 
-1. A Git tag matching `v*` triggers the [`Android Release`](.github/workflows/android-release.yml) GitHub Actions workflow.
+1. A Git tag matching `v*` triggers the [`Android Release`](.github/workflows/android-release.yml) GitHub Actions workflow on a GitHub-hosted `ubuntu-latest` runner (manual `workflow_dispatch` is also supported).
 2. The workflow decodes the release keystore from the `KEYSTORE_BASE64` secret and runs `./gradlew bundleRelease` to produce an Android App Bundle (`.aab`).
 3. The workflow installs Fastlane and runs `fastlane supply` to upload the AAB to the Google Play Console.
 4. The release is placed on the configured Play track (default: `internal`).
+
+Console setup is not a manual-only checklist: the agent must execute the Cloud/Play configuration through Playwright using `SERVICE_EMAIL` / `SERVICE_PASS` from `server/.env`, pausing for manual 2FA. The steps below are the target state the automation must complete and verify.
 
 ## Prerequisites
 

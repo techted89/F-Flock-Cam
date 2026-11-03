@@ -2,7 +2,6 @@ package com.techted89.flockcam.remote
 
 import android.content.Context
 import com.techted89.flockcam.data.model.ActionAck
-import com.techted89.flockcam.data.model.ActionResponse
 import com.techted89.flockcam.data.model.EnqueueActionRequest
 import com.techted89.flockcam.data.model.PendingAction
 import com.techted89.flockcam.data.remote.FlockApi
@@ -27,7 +26,7 @@ class RemoteActionRepository(
         return emptyList()
     }
 
-    suspend fun enqueueAction(deviceId: String, action: String, source: String?): ActionResponse {
+    suspend fun enqueueAction(deviceId: String, action: String, source: String?): ActionAck {
         val request = EnqueueActionRequest(
             deviceId = deviceId,
             action = action,

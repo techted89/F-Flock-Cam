@@ -64,7 +64,7 @@ class FlockMonitoringService : Service() {
             ACTION_START_MONITORING -> startMonitoring()
             ACTION_STOP_MONITORING -> stopMonitoring()
         }
-        return START_NOT_STRICTLY_REQUIRED
+        return START_NOT_STICKY
     }
 
     private fun startMonitoring() {

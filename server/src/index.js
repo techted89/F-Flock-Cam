@@ -1,107 +1,61 @@
+require('./env');
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
+const config = require('./config');
 const { db } = require('./db');
-const { fetchDeflockCamerasInBbox } = require('./deflock');
-const { planRouteAvoiding, listUserCamerasWithinRadius, haversineMeters } = require('./routing');
+const { rateLimit } = require('./rate-limit');
+const { startMaintenance } = require('./maintenance');
 const actionsApi = require('./actions');
+const userService = require('./user-service');
+const paymentService = require('./payment-service');
+const adService = require('./ad-service');
+const cameraService = require('./camera-service');
 
 const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', config.trustProxy);
+app.use(compression({ threshold: 1024 }));
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
 
-const PORT = Number(process.env.PORT || 8080);
+// Cheap, dependency-free hardening. The API is JSON-only and never framed.
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  next();
+});
+
+// Broad abuse ceiling. Route-specific limiters below are tighter.
+app.use('/api', rateLimit({ windowMs: 60_000, max: 600, maxKeys: 10_000 }));
+
 const DEVICE_ID = process.env.DEVICE_ID || 'anonymous-device';
 
-function bboxAround(latitude, longitude, radiusMeters) {
-  const latDelta = (radiusMeters / 111_320) + 1;
-  const lngDelta = (radiusMeters / (111_320 * Math.max(Math.cos((Number(latitude) * Math.PI) / 180), 0.01))) + 1;
-  return {
-    minLat: Number(latitude) - latDelta,
-    maxLat: Number(latitude) + latDelta,
-    minLng: Number(longitude) - lngDelta,
-    maxLng: Number(longitude) + lngDelta,
-  };
-}
-
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'F-Flock-Cam hybrid server' });
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    status: 'ok',
+    service: 'F-Flock-Cam hybrid server',
+    version: require('../package.json').version,
+    now: userService.nowSeconds(),
+  });
 });
 
-app.get('/api/cameras/nearby', async (req, res) => {
-  const latitude = Number(req.query.lat);
-  const longitude = Number(req.query.lng);
-  const radius = Number(req.query.radius || 500);
-  if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
-    return res.status(400).json({ status: 'error', message: 'lat and lng are required' });
-  }
+// User management is deliberately isolated from the camera index. Auth and
+// entitlement routes never read or write camera location tables.
+app.use('/api/auth', userService.router);
+app.use('/api/users', userService.router);
+app.use('/api/payments', paymentService.router);
+app.use('/api/ads', adService.router);
 
-  const bbox = bboxAround(latitude, longitude, radius);
-  const deflockCameras = await fetchDeflockCamerasInBbox(bbox.minLat, bbox.maxLat, bbox.minLng, bbox.maxLng);
-  const userCameras = listUserCamerasWithinRadius(latitude, longitude, radius);
-  const merged = [...userCameras];
-  for (const camera of deflockCameras) {
-    if (camera.latitude == null || camera.longitude == null) continue;
-    const distance = haversineMeters(camera, { latitude, longitude });
-    if (distance > radius) continue;
-    if (merged.some((existing) => existing.id === camera.id)) continue;
-    merged.push({ ...camera, distanceMeters: distance });
-  }
-  merged.sort((a, b) => (a.distanceMeters ?? Number.MAX_SAFE_INTEGER) - (b.distanceMeters ?? Number.MAX_SAFE_INTEGER));
+// Camera index: region fetch, nearby compatibility, route corridors, reports.
+const cameraLimiter = rateLimit({ windowMs: 60_000, max: 120 });
+app.use('/api/cameras', cameraLimiter, cameraService.router);
+app.use('/api/routes', cameraLimiter, cameraService.routeAliasRouter);
 
-  return res.json({ cameras: merged, source: 'HYBRID', bbox });
-});
-
-app.post('/api/cameras', (req, res) => {
-  const { deviceId, latitude, longitude, source, note } = req.body || {};
-  if (latitude == null || longitude == null) {
-    return res.status(400).json({ status: 'error', message: 'latitude and longitude are required' });
-  }
-  const info = db
-    .prepare('INSERT INTO user_cameras (device_id, latitude, longitude, source, note) VALUES (?, ?, ?, ?, ?)')
-    .run(deviceId || DEVICE_ID, latitude, longitude, source || 'USER', note || null);
-  return res.json({ status: 'ok', cameraId: Number(info.lastInsertRowid) });
-});
-
-app.post('/api/routes/predict', async (req, res) => {
-  const { originLatitude, originLongitude, destinationLatitude, destinationLongitude, radiusMeters } = req.body || {};
-  const radius = Number(radiusMeters || 500);
-  const bbox = bboxAround(originLatitude, destinationLatitude, radius * 2);
-  const deflockCameras = await fetchDeflockCamerasInBbox(bbox.minLat, bbox.maxLat, bbox.minLng, bbox.maxLng);
-  const userCameras = listUserCamerasWithinRadius(originLatitude, destinationLatitude, radius * 2);
-  const avoidCameras = [...userCameras, ...deflockCameras]
-    .filter((camera) => camera.latitude != null && camera.longitude != null)
-    .slice(0, 50);
-
-  const result = planRouteAvoiding(
-    { latitude: originLatitude, longitude: originLongitude },
-    { latitude: destinationLatitude, longitude: destinationLongitude },
-    avoidCameras,
-    { radiusMeters: radius },
-  );
-
-  return res.json({ route: result.route, cameras: result.cameras });
-});
-
-app.post('/api/routes/avoid', async (req, res) => {
-  const { originLatitude, originLongitude, destinationLatitude, destinationLongitude, radiusMeters } = req.body || {};
-  const radius = Number(radiusMeters || 500);
-  const bbox = bboxAround(originLatitude, destinationLatitude, radius * 2);
-  const deflockCameras = await fetchDeflockCamerasInBbox(bbox.minLat, bbox.maxLat, bbox.minLng, bbox.maxLng);
-  const userCameras = listUserCamerasWithinRadius(originLatitude, originLongitude, radius * 2);
-  const avoidCameras = [...userCameras, ...deflockCameras]
-    .filter((camera) => camera.latitude != null && camera.longitude != null)
-    .slice(0, 50);
-
-  const result = planRouteAvoiding(
-    { latitude: originLatitude, longitude: originLongitude },
-    { latitude: destinationLatitude, longitude: destinationLongitude },
-    avoidCameras,
-    { radiusMeters: radius },
-  );
-
-  return res.json({ route: result.route, cameras: result.cameras, avoided: result.avoided });
-});
-
+// Legacy remote-action queue used by the Android foreground service.
 app.get('/api/actions/pending', (req, res) => {
   const deviceId = req.query.deviceId || DEVICE_ID;
   return res.json({ actions: actionsApi.listPending(deviceId) });
@@ -109,13 +63,57 @@ app.get('/api/actions/pending', (req, res) => {
 
 app.post('/api/actions', (req, res) => {
   const { deviceId, action, source } = req.body || {};
+  if (!action) {
+    return res.status(400).json({ status: 'error', message: 'action is required.' });
+  }
   const created = actionsApi.createPending(deviceId || DEVICE_ID, action, source);
   return res.json({ status: 'QUEUED', actionId: created.id });
 });
 
-app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`F-Flock-Cam server listening on port ${PORT}`);
+app.use((req, res) => {
+  res.status(404).json({ status: 'error', message: 'Not found.' });
 });
+
+// Central error handler. Never leak stack traces or secrets to clients.
+// eslint-disable-next-line no-unused-vars
+app.use((error, req, res, next) => {
+  // eslint-disable-next-line no-console
+  console.error(`[error] ${req.method} ${req.originalUrl}: ${error.message}`);
+  const status = error.status && Number.isInteger(error.status) ? error.status : 500;
+  res.status(status).json({
+    status: 'error',
+    message: status === 500 ? 'Internal server error.' : error.message,
+  });
+});
+
+if (require.main === module) {
+  startMaintenance(db);
+  const server = app.listen(config.port, config.host, () => {
+    // eslint-disable-next-line no-console
+    console.log(`F-Flock-Cam server listening on ${config.host}:${config.port}`);
+  });
+  // Bound slow clients so one connection cannot pin a worker indefinitely.
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
+  server.requestTimeout = 30_000;
+
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    const forceExit = setTimeout(() => process.exit(1), 10_000);
+    if (typeof forceExit.unref === 'function') forceExit.unref();
+    server.close(() => {
+      try {
+        db.close();
+      } catch (error) {
+        // ignore close errors during shutdown
+      }
+      process.exit(0);
+    });
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}
 
 module.exports = app;

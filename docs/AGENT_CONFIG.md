@@ -2,6 +2,8 @@
 
 This document covers the command-line agent configuration for the F-Flock-Cam project: Google service accounts, tokens, API keys, GitHub secrets and agent (Claude Code / MCP) setup.
 
+> Console automation: the agent must execute the Cloud/Play console setup through Playwright using `SERVICE_EMAIL` / `SERVICE_PASS` from gitignored `server/.env`, pausing for manual 2FA. The CLI commands below are for verification or fallback.
+
 ## 1. GitHub
 
 - Token used for CLI operations: `gh` authenticated as `techted89` (see token scopes: `repo`, `workflow`, `admin:repo_hook`, etc.).

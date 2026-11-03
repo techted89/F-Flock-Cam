@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<data>
-    <fileset>
-        <exclude name="**/build/**" />
-        <exclude name="**/gradle/**" />
-        <exclude name="local.properties" />
-    </fileset>
-</data>
+<data-extraction-rules>
+    <!-- Never carry session tokens or purchase state across devices/backups. -->
+    <cloud-backup>
+        <exclude domain="sharedpref" path="flockcam_session.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="flockcam_session.xml" />
+    </device-transfer>
+</data-extraction-rules>

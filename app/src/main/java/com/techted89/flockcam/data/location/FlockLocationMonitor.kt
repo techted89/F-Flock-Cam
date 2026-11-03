@@ -29,7 +29,7 @@ class FlockLocationMonitor(
             .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
             .setInterval(1_000)
             .setMinUpdateIntervalMillis(500)
-            .setMaxUpdateIntervalMillis(5_000)
+            .setMaxUpdateDelayMillis(5_000)
             .build()
         val locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {

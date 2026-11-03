@@ -1,34 +1,25 @@
-const Database = require('better-sqlite3');
+const fs = require('fs');
 const path = require('path');
+const Database = require('better-sqlite3');
+const { dbPath } = require('./config');
+const { migrate } = require('./migrations');
 
-const db = new Database(process.env.DB_PATH || path.join(__dirname, '..', 'data', 'flockcam.db'));
+if (dbPath !== ':memory:') {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+}
 
+const db = new Database(dbPath);
+
+// Tuned for a small VPS: WAL keeps readers non-blocking, a bounded page cache
+// prevents the process from growing without limit, and NORMAL sync is a safe
+// tradeoff for cache-style data.
 db.pragma('journal_mode = WAL');
-db.exec(`
-  CREATE TABLE IF NOT EXISTS user_cameras (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id TEXT NOT NULL DEFAULT 'anonymous-device',
-    latitude REAL NOT NULL,
-    longitude REAL NOT NULL,
-    source TEXT,
-    note TEXT,
-    created_at INTEGER NOT NULL DEFAULT (unixepoch())
-  );
+db.pragma('synchronous = NORMAL');
+db.pragma('foreign_keys = ON');
+db.pragma('cache_size = -16000'); // ~16 MB page cache
+db.pragma('temp_store = MEMORY');
+db.pragma('busy_timeout = 5000');
 
-  CREATE TABLE IF NOT EXISTS deflock_cache (
-    cache_key TEXT PRIMARY KEY,
-    payload TEXT NOT NULL,
-    fetched_at INTEGER NOT NULL DEFAULT (unixepoch())
-  );
-
-  CREATE TABLE IF NOT EXISTS pending_actions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id TEXT NOT NULL,
-    action TEXT NOT NULL,
-    source TEXT,
-    status TEXT NOT NULL DEFAULT 'PENDING',
-    created_at INTEGER NOT NULL DEFAULT (unixepoch())
-  );
-`);
+migrate(db);
 
 module.exports = { db };
