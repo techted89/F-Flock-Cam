@@ -27,7 +27,7 @@ class FlockLocationMonitor(
     fun start(minAccuracyMeters: Int = DEFAULT_ACCURACY_M) {
         val locationRequest = LocationRequest.Builder()
             .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
-            .setInterval(1_000)
+            .setIntervalMillis(1_000)
             .setMinUpdateIntervalMillis(500)
             .setMaxUpdateDelayMillis(5_000)
             .build()

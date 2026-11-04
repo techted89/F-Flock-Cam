@@ -11,7 +11,7 @@ class RemoteActionWorker(
 
     override suspend fun doWork(): Result {
         val repository = (applicationContext as com.techted89.flockcam.FlockCamApplication).remoteActionRepository
-        val deviceId = params.inputData.getString(KEY_DEVICE_ID) ?: DEFAULT_DEVICE_ID
+        val deviceId = getInputData().getString(KEY_DEVICE_ID) ?: DEFAULT_DEVICE_ID
         val pending = repository.getPendingActions(deviceId)
 
         if (pending.isNotEmpty()) {
