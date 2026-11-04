@@ -104,7 +104,7 @@ dependencies {
     implementation(libs.play.services.ads)
 
     implementation(libs.androidx.credentials)
-    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
     implementation(libs.billing.ktx)
 
@@ -117,5 +117,5 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.test.ext.junit)
-    androidTestImplementation(libs.androidx.test.espresso.core)
+    androidTestImplementation(libs.androidx.test.espresso)
 }
