@@ -104,7 +104,7 @@ dependencies {
     implementation(libs.play.services.ads)
 
     implementation(libs.androidx.credentials)
-    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.androidx.credentials.play.services)
     implementation(libs.googleid)
     implementation(libs.billing.ktx)
 
